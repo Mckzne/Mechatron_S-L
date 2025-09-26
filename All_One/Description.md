@@ -1,0 +1,1 @@
+The code turns as many LEDs as chosen into one singular colour by chnanging the RGB values in the corresponding function set to full brightness. The code is a test to ensure LEDs are at blinding brightness and fully functioning.
