@@ -1,1 +1,1 @@
-
+The folder contains preliminary codes subject to change and have not been tested on the infrastructure yet. The final codes with the required changes assuming the scehmatic of 25 esp32s across a 10x10 matrix of tiles, with each esp32 connected to a 2x2 matrix, will be committed once testing is over with required outputs, along with a video of the tiles. 
