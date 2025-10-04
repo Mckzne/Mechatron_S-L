@@ -1,0 +1,36 @@
+import time
+import json
+import paho.mqtt.client as mqtt
+
+BROKER = "10.42.0.1"  # Raspberry Pi IP
+TOPIC = "esp/1/in"
+
+led_pins = [12, 13, 14, 27]
+
+client = mqtt.Client("pattern_toggler")
+client.connect(BROKER, 1883, 60)
+client.loop_start()
+
+# Define patterns: list of dictionaries {pin: state}
+patterns = [
+    {12: "on", 13: "off", 14: "off", 27: "off"},
+    {12: "off", 13: "on", 14: "off", 27: "off"},
+    {12: "off", 13: "off", 14: "on", 27: "off"},
+    {12: "off", 13: "off", 14: "off", 27: "on"},
+    {12: "on", 13: "on", 14: "off", 27: "off"},
+    {12: "off", 13: "on", 14: "on", 27: "off"},
+    {12: "off", 13: "off", 14: "on", 27: "on"},
+    {12: "on", 13: "on", 14: "on", 27: "on"},
+]
+
+try:
+    while True:
+        for pattern in patterns:
+            for pin, state in pattern.items():
+                payload = {"pin": pin, "state": state}
+                client.publish(TOPIC, json.dumps(payload))
+            print(f"Pattern sent: {pattern}")
+            time.sleep(4)  # wait 1 second before next pattern
+except KeyboardInterrupt:
+    client.loop_stop()
+    client.disconnect()
