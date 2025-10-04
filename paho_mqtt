@@ -1,0 +1,65 @@
+# controller.py
+import argparse
+import json
+import time
+import paho.mqtt.client as mqtt
+
+# Default values (you can override via --broker or --device if needed)
+BROKER = "10.42.0.1"        # Raspberry Pi hotspot IP (same as ESP32 connects to)
+DEVICE = "esp32-01"         # Must match deviceId in ESP32 code
+
+STATUS_TOPIC = f"devices/{DEVICE}/status"
+TELE_TOPIC = f"devices/{DEVICE}/telemetry"
+CMD_TOPIC = f"devices/{DEVICE}/cmd"
+
+def on_connect(client, userdata, flags, rc):
+    print("Connected to broker, rc=", rc)
+    client.subscribe(STATUS_TOPIC)
+    client.subscribe(TELE_TOPIC)
+    print("Subscribed to:", STATUS_TOPIC, TELE_TOPIC)
+
+def on_message(client, userdata, msg):
+    try:
+        payload = msg.payload.decode()
+    except:
+        payload = str(msg.payload)
+    print(f"[{msg.topic}] {payload}")
+
+client = mqtt.Client("controller-pc")
+client.on_connect = on_connect
+client.on_message = on_message
+
+client.connect(BROKER, 1883, 60)
+client.loop_start()
+
+print("Controller running. Type commands:")
+print("  led on    -> turn LED on")
+print("  led off   -> turn LED off")
+print("  pub <topic> <message>  -> publish raw message")
+print("  quit")
+
+try:
+    while True:
+        cmd = input("> ").strip().split()
+        if not cmd:
+            continue
+        if cmd[0] == "quit":
+            break
+        if cmd[0] == "led" and len(cmd) == 2:
+            state = 1 if cmd[1].lower() in ("on", "1", "true") else 0
+            payload = {"cmd": "led", "state": state}
+            client.publish(CMD_TOPIC, json.dumps(payload), qos=1)
+            print("Published", payload, "to", CMD_TOPIC)
+        elif cmd[0] == "pub" and len(cmd) >= 3:
+            topic = cmd[1]
+            message = " ".join(cmd[2:])
+            client.publish(topic, message)
+            print("Published raw to", topic)
+        else:
+            print("Unknown command")
+except KeyboardInterrupt:
+    pass
+finally:
+    client.loop_stop()
+    client.disconnect()
+    print("Stopped")
