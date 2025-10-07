@@ -1,0 +1,38 @@
+import paho.mqtt.client as mqtt
+import time
+
+# ---------- Configuration ----------
+MQTT_BROKER = "10.42.0.1"  # MQTT Broker IP address
+MQTT_PORT = 1883
+TOPIC_SHARED = "esp/all/in"  # Shared MQTT Topic for all ESP32 boards
+
+# ---------- Functions ----------
+def send_mode(mode):
+    """
+    Connects to the MQTT broker and publishes the mode to the shared topic.
+
+    Parameters:
+        mode (str): The animation mode to send, "wave" or "gold".
+    """
+    client = mqtt.Client()
+    try:
+        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        client.loop_start()
+        print(f"Publishing mode '{mode}' to topic '{TOPIC_SHARED}'...")
+        client.publish(TOPIC_SHARED, mode)
+        # Wait briefly to ensure message delivery
+        time.sleep(1)
+        print(f"Mode '{mode}' sent successfully.")
+    except Exception as e:
+        print(f"Failed to send mode '{mode}': {e}")
+    finally:
+        client.loop_stop()
+        client.disconnect()
+
+# ---------- Main ----------
+if __name__ == "__main__":
+    mode_input = input("Enter the mode to send ('wave' or 'gold'): ").strip().lower()
+    if mode_input in ["wave", "gold"]:
+        send_mode(mode_input)
+    else:
+        print("Invalid input. Please enter 'wave' or 'gold'.")
