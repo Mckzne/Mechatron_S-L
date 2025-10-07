@@ -1,0 +1,164 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <Adafruit_NeoPixel.h>
+#include <math.h>
+
+// ---------- CONFIG ----------
+#define WIFI_SSID "snakebuzz"
+#define WIFI_PASS "chaosled"
+const char* MQTT_SERVER = "10.42.0.1";
+const int   MQTT_PORT   = 1883;
+#define ESP_ID 1    // Change to unique ID 1-5 for each ESP32 device
+
+// Each ESP has 5 tiles:
+#define TILE_COUNT 5
+#define PIN_1 12
+#define PIN_2 13
+#define PIN_3 14
+#define PIN_4 27
+#define PIN_5 26
+
+#define NUM_LEDS 20
+#define BRIGHTNESS 200
+// ----------------------------
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+Adafruit_NeoPixel tiles[TILE_COUNT] = {
+  Adafruit_NeoPixel(NUM_LEDS, PIN_1, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_LEDS, PIN_2, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_LEDS, PIN_3, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_LEDS, PIN_4, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_LEDS, PIN_5, NEO_GRB + NEO_KHZ800)
+};
+
+String mode = "wave";
+unsigned long lastFrame = 0;
+float t = 0.0;
+
+float fade(float x) { return x*x*x*(x*(x*6-15)+10); }
+float grad(int hash, float x) { return ((hash & 1) ? x : -x); }
+int perm[512];
+void initNoise() {
+  for (int i = 0; i < 256; i++) perm[i] = i;
+  for (int i = 255; i > 0; i--) {
+    int j = random(i + 1);
+    int tmp = perm[i];
+    perm[i] = perm[j];
+    perm[j] = tmp;
+  }
+  for (int i = 0; i < 256; i++) perm[i + 256] = perm[i];
+}
+
+float noise1D(float x) {
+  int i0 = floor(x);
+  int i1 = i0 + 1;
+  float x0 = x - i0;
+  float x1 = x0 - 1.0;
+  float t0 = 1.0 - x0 * x0;
+  float t1 = 1.0 - x1 * x1;
+  t0 = t0 * t0;
+  t1 = t1 * t1;
+  int h0 = perm[i0 & 255];
+  int h1 = perm[i1 & 255];
+  float n0 = t0 * grad(h0, x0);
+  float n1 = t1 * grad(h1, x1);
+  return 0.395 * (n0 + n1);
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  String msg;
+  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+  msg.trim();
+  if (msg.indexOf("wave") != -1) {
+    mode = "wave";
+  } else if (msg.indexOf("gold") != -1) {
+    mode = "gold";
+  }
+  Serial.print("Mode set to: ");
+  Serial.println(mode);
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    String cid = "esp" + String(ESP_ID);
+    if (client.connect(cid.c_str())) {
+      char ownTopic[32];
+      sprintf(ownTopic, "esp/%d/in", ESP_ID);
+      client.subscribe(ownTopic);
+      client.subscribe("esp/all/in");  // Shared topic for all ESP boards
+      Serial.println("Connected MQTT and subscribed to own and shared topics.");
+    } else {
+      Serial.print(".");
+      delay(2000);
+    }
+  }
+}
+
+void waveAnimation(float timeVal) {
+  for (int tile = 0; tile < TILE_COUNT; tile++) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      float n = noise1D(i * 0.4 + timeVal * 0.5);
+      n = constrain((n + 1.0) * 0.5, 0.0, 1.0);
+      n = sqrt(n);
+      uint8_t blue = map(n * 255, 0, 255, 30, 255);
+      uint8_t green = map(n * 255, 0, 255, 0, 200);
+      tiles[tile].setPixelColor(i, tiles[tile].Color(0, green, blue));
+    }
+    tiles[tile].show();
+  }
+}
+
+void goldAnimation(float timeVal) {
+  for (int tile = 0; tile < TILE_COUNT; tile++) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      float phase = (float)i / NUM_LEDS;
+      float a = 0.5 + 0.5 * sin(2 * PI * (0.5 * timeVal + phase * 0.3));
+      a = sqrt(a);
+      uint8_t r = (uint8_t)(255 * a);
+      uint8_t g = (uint8_t)(215 * a);
+      uint8_t b = (uint8_t)(0 * a);
+      tiles[tile].setPixelColor(i, tiles[tile].Color(r, g, b));
+    }
+    tiles[tile].show();
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  randomSeed(analogRead(0));
+  initNoise();
+
+  for (int i = 0; i < TILE_COUNT; i++) {
+    tiles[i].begin();
+    tiles[i].setBrightness(BRIGHTNESS);
+    tiles[i].show();
+  }
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("Connecting WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println("\nWiFi connected.");
+
+  client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setCallback(callback);
+}
+
+void loop() {
+  if (!client.connected()) reconnect();
+  client.loop();
+
+  unsigned long now = millis();
+  if (now - lastFrame > 40) {
+    t += 0.04;
+    if (mode == "wave")
+      waveAnimation(t);
+    else
+      goldAnimation(t);
+    lastFrame = now;
+  }
+}
