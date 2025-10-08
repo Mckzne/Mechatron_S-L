@@ -4,13 +4,11 @@ import time
 import os
 import paho.mqtt.client as mqtt
 
-# -------------------
-# MQTT Configuration
-# -------------------
+# ---------- Configuration ----------
 BROKER = "10.42.0.1"
 MQTT_PORT = 1883
+STATE_FILE = "game_state.json"
 
-# Mapping ESP devices to their tiles and GPIO pins
 TILE_MAPPING = {
     'esp/1/in':  {'tiles': [1, 2, 19, 20], 'pins': [13, 12, 27, 14]},
     'esp/2/in':  {'tiles': [3, 4, 17, 18], 'pins': [13, 12, 27, 14]},
@@ -22,16 +20,16 @@ TILE_MAPPING = {
     'esp/8/in':  {'tiles': [25, 26, 35, 36], 'pins': [13, 12, 27, 14]},
     'esp/7/in':  {'tiles': [23, 24, 37, 38], 'pins': [13, 12, 27, 14]},
     'esp/6/in': {'tiles': [21, 22, 39, 40], 'pins': [13, 12, 27, 14]},
-    'esp/11/in': {'tiles': [41, 42, 59, 60], 'pins': [13, 12, 27, 14]},
-    'esp/12/in': {'tiles': [43, 44, 57, 58], 'pins': [13, 12, 27, 14]},
+    'esp/15/in': {'tiles': [41, 42, 59, 60], 'pins': [13, 12, 27, 14]},
+    'esp/14/in': {'tiles': [43, 44, 57, 58], 'pins': [13, 12, 27, 14]},
     'esp/13/in': {'tiles': [45, 46, 55, 56], 'pins': [13, 12, 27, 14]},
-    'esp/14/in': {'tiles': [47, 48, 53, 54], 'pins': [13, 12, 27, 14]},
-    'esp/15/in': {'tiles': [49, 50, 51, 52], 'pins': [13, 12, 27, 14]},
-    'esp/16/in': {'tiles': [69, 70, 71, 72], 'pins': [13, 12, 27, 14]},
-    'esp/17/in': {'tiles': [67, 68, 73, 74], 'pins': [13, 12, 27, 14]},
+    'esp/12/in': {'tiles': [47, 48, 53, 54], 'pins': [13, 12, 27, 14]},
+    'esp/11/in': {'tiles': [49, 50, 51, 52], 'pins': [13, 12, 27, 14]},
+    'esp/20/in': {'tiles': [69, 70, 71, 72], 'pins': [13, 12, 27, 14]},
+    'esp/19/in': {'tiles': [67, 68, 73, 74], 'pins': [13, 12, 27, 14]},
     'esp/18/in': {'tiles': [65, 66, 75, 76], 'pins': [13, 12, 27, 14]},
-    'esp/19/in': {'tiles': [63, 64, 77, 78], 'pins': [13, 12, 27, 14]},
-    'esp/20/in': {'tiles': [61, 62, 79, 80], 'pins': [13, 12, 27, 14]},
+    'esp/17/in': {'tiles': [63, 64, 77, 78], 'pins': [13, 12, 27, 14]},
+    'esp/16/in': {'tiles': [61, 62, 79, 80], 'pins': [13, 12, 27, 14]},
     'esp/21/in': {'tiles': [89, 90, 91, 92], 'pins': [13, 12, 27, 14]},
     'esp/22/in': {'tiles': [87, 88, 93, 94], 'pins': [13, 12, 27, 14]},
     'esp/23/in': {'tiles': [85, 86, 95, 96], 'pins': [13, 12, 27, 14]},
@@ -39,44 +37,37 @@ TILE_MAPPING = {
     'esp/25/in': {'tiles': [81, 82, 99, 100], 'pins': [13, 12, 27, 14]}
 }
 
-# Team configuration
 TEAMS = {
-    "Team1": {"color": "#00CED1"},  # Teal
-    "Team2": {"color": "#800080"}   # Purple
+    "Team1": {"color": "#FF4500"},  # Orange Red
+    "Team2": {"color": "#00CED1"},  # Dark Turquoise
+    "Team3": {"color": "#FFD700"},  # Gold
+    "Team4": {"color": "#32CD32"},  # Lime Green
+    "Team5": {"color": "#8A2BE2"},  # Blue Violet
+    "Team6": {"color": "#DC143C"}   # Crimson Red
 }
 
-STATE_FILE = "game_state.json"
 MAX_TILES = 100
 
-# MQTT client setup
-client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
+client = mqtt.Client(client_id="master_pi", protocol=mqtt.MQTTv311)
 client.connect(BROKER, MQTT_PORT, 60)
 client.loop_start()
 
-
-# -------------------
-# Utility Functions
-# -------------------
+# ---------- Utility Functions ----------
 def publish(topic, payload):
     client.publish(topic, json.dumps(payload))
 
-
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}")
-
 
 def save_state(game_state):
     with open(STATE_FILE, "w") as f:
         json.dump(game_state, f)
 
-
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             return json.load(f)
-    else:
-        return None
-
+    return None
 
 def all_leds_off():
     for topic, mapping in TILE_MAPPING.items():
@@ -84,144 +75,107 @@ def all_leds_off():
             payload = {"tile": None, "state": "off", "color": "#000000"}
             publish(topic, payload)
 
-
 def turn_tile_on(tile, color):
+    """Turn on a tile with a given color."""
     for topic, mapping in TILE_MAPPING.items():
         if tile in mapping["tiles"]:
             idx = mapping["tiles"].index(tile)
+            pin = mapping["pins"][idx]
             payload = {"tile": tile, "state": "on", "color": color}
             publish(topic, payload)
-            return
-
-
-def turn_tile_off(tile):
-    for topic, mapping in TILE_MAPPING.items():
-        if tile in mapping["tiles"]:
-            idx = mapping["tiles"].index(tile)
-            payload = {"tile": tile, "state": "off", "color": "#000000"}
-            publish(topic, payload)
-            return
-
 
 def roll_dice():
     return random.randint(1, 6)
 
+# ---------- Enhanced Animations ----------
+def startup_tile_test():
+    """Sequentially turn on all tiles, keep them on for 3s, then turn off."""
+    log("Starting all-tile LED test...")
+    for tile in range(1, MAX_TILES + 1):
+        turn_tile_on(tile, "#FFFFFF")  # White for test only
+        time.sleep(0.05)  # Slight delay between tiles
+
+    time.sleep(3)  # Keep all tiles on together
+    all_leds_off()
+    log("LED test complete.\n")
 
 def animate_move(team, start, end):
-    """LED animation for movement."""
-    color = TEAMS[team]["color"]
-    step = 1 if end >= start else -1
-    for tile in range(start + step, end + step, step):
-        turn_tile_on(tile, color)
+    """Animate movement: each tile along path turns on sequentially and stays on, then only final tile remains."""
+    team_color = TEAMS[team]["color"]
+    path = list(range(start + 1, end + 1)) if end > start else list(range(start - 1, end - 1, -1))
+    
+    # Turn on tiles one by one, all remain on
+    for tile in path:
+        turn_tile_on(tile, team_color)
         time.sleep(0.3)
-        if tile != end:
-            turn_tile_off(tile)
-    turn_tile_on(end, color)
+    
+    # Keep all path tiles on for 10 seconds
+    time.sleep(10)
+    
+    # Turn off all tiles except the final one
+    for tile in path[:-1]:
+        turn_tile_on(tile, "#000000")
+    turn_tile_on(path[-1], team_color)
 
-
-# -------------------
-# Startup Animation
-# -------------------
-def led_test_animation():
-    """Sequentially light up each tile from 1 → 100."""
-    log("🔧 Running LED test animation...")
-    test_color = "#FFFFFF"  # White test color
-    for tile in range(1, MAX_TILES + 1):
-        turn_tile_on(tile, test_color)
-        time.sleep(0.08)
-        if tile > 1:
-            turn_tile_off(tile - 1)
-    # Final tile off
-    turn_tile_off(MAX_TILES)
-    time.sleep(0.5)
-    all_leds_off()
-    log("✅ LED test complete. Starting game...")
-
-
-# -------------------
-# Main Game Loop
-# -------------------
+# ---------- Main Game Loop ----------
 def main_loop():
-    led_test_animation()  # Run LED test before starting
+    startup_tile_test()
 
+    # Load or start from 0
     game_state = load_state()
-    if not game_state:
+    choice = input("Start from previous state? (yes/no): ").strip().lower()
+    if choice != "yes" or not game_state:
         game_state = {"positions": {team: 0 for team in TEAMS}}
-        save_state(game_state)
-
-    all_leds_off()
-
-    while True:
-        print("\nCurrent Positions:")
-        for team in TEAMS:
-            print(f"{team}: {game_state['positions'][team]}")
-
-        for team, pos in game_state['positions'].items():
+    else:
+        # Light up existing positions
+        for team, pos in game_state["positions"].items():
             if pos > 0:
                 turn_tile_on(pos, TEAMS[team]["color"])
 
-        print("\nWhich team pressed the buzzer first? (Team1/Team2): ")
-        first_team = input().strip()
+    all_leds_off()  # Clean start
 
+    while True:
+        print("\nCurrent Positions:")
+        for team, pos in game_state["positions"].items():
+            print(f"{team}: {pos}")
+            if pos > 0:
+                turn_tile_on(pos, TEAMS[team]["color"])
+
+        first_team = input("\nWhich team pressed the buzzer first? (Team1–Team6): ").strip()
         if first_team not in TEAMS:
             print("Invalid team name. Try again.")
             continue
 
-        print("Choose: another round or roll dice? (round/roll): ")
-        choice = input().strip().lower()
+        choice = input("Choose: another round or roll dice? (round/roll): ").strip().lower()
 
         if choice == "round":
-            other_team = [t for t in TEAMS if t != first_team][0]
-            print(f"{first_team} can't answer again this round.")
-            print(f"Which team wants to answer? (Only {other_team}): ")
-            next_team = input().strip()
-
-            if next_team != other_team:
+            other_teams = [t for t in TEAMS if t != first_team]
+            next_team = input(f"{first_team} can't answer. Which team wants to answer? (Choose one of {other_teams}): ").strip()
+            if next_team not in other_teams:
                 print("Invalid team. Round reset.")
                 continue
-
-            print("Is the answer correct or wrong? (correct/wrong): ")
-            result = input().strip().lower()
-
+            result = input("Is the answer correct or wrong? (correct/wrong): ").strip().lower()
             if result == "wrong":
-                print("Wrong answer. Round resetting...")
+                print("Wrong answer, round resetting...")
                 continue
             else:
                 steps = roll_dice()
-                print(f"{next_team} rolls the dice and gets {steps}.")
                 old_tile = game_state['positions'][next_team]
                 new_tile = min(old_tile + steps, MAX_TILES)
-                turn_tile_off(old_tile)
                 animate_move(next_team, old_tile, new_tile)
                 game_state['positions'][next_team] = new_tile
                 save_state(game_state)
-                if new_tile == MAX_TILES:
-                    print(f"🎉 {next_team} wins the game!")
-                    all_leds_off()
-                    break
                 continue
 
         elif choice == "roll":
             steps = roll_dice()
-            print(f"{first_team} rolls the dice and gets {steps}.")
             old_tile = game_state['positions'][first_team]
             new_tile = min(old_tile + steps, MAX_TILES)
-            turn_tile_off(old_tile)
             animate_move(first_team, old_tile, new_tile)
             game_state['positions'][first_team] = new_tile
             save_state(game_state)
-            if new_tile == MAX_TILES:
-                print(f"🎉 {first_team} wins the game!")
-                all_leds_off()
-                break
-
         else:
-            print("Invalid input. Try again.")
-            continue
+            print("Invalid input, try again.")
 
-
-# -------------------
-# Run Game
-# -------------------
 if _name_ == "_main_":
     main_loop()
