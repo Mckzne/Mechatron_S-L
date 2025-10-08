@@ -1,0 +1,228 @@
+import json
+import random
+import time
+import os
+import paho.mqtt.client as mqtt
+
+# ---------------------------
+# MQTT Configuration
+# ---------------------------
+BROKER = "10.42.0.1"
+MQTT_PORT = 1883
+
+# ESP Tile Mapping (fill fully for your setup)
+TILE_MAPPING = {
+    'esp/1/in':  {'tiles': [1, 2, 19, 20], 'pins': [13, 12, 27, 14]},
+    'esp/2/in':  {'tiles': [3, 4, 17, 18], 'pins': [13, 12, 27, 14]},
+    'esp/3/in':  {'tiles': [5, 6, 15, 16], 'pins': [13, 12, 27, 14]},
+    'esp/4/in':  {'tiles': [7, 8, 13, 14], 'pins': [13, 12, 27, 14]},
+    'esp/5/in':  {'tiles': [9, 10, 11, 12], 'pins': [12, 13, 14, 27]},
+    'esp/10/in':  {'tiles': [29, 30, 31, 32], 'pins': [13, 12, 27, 14]},
+    'esp/9/in':  {'tiles': [27, 28, 33, 34], 'pins': [13, 12, 27, 14]},
+    'esp/8/in':  {'tiles': [25, 26, 35, 36], 'pins': [13, 12, 27, 14]},
+    'esp/7/in':  {'tiles': [23, 24, 37, 38], 'pins': [13, 12, 27, 14]},
+    'esp/6/in': {'tiles': [21, 22, 39, 40], 'pins': [13, 12, 27, 14]},
+    'esp/11/in': {'tiles': [41, 42, 59, 60], 'pins': [13, 12, 27, 14]},
+    'esp/12/in': {'tiles': [43, 44, 57, 58], 'pins': [13, 12, 27, 14]},
+    'esp/13/in': {'tiles': [45, 46, 55, 56], 'pins': [13, 12, 27, 14]},
+    'esp/14/in': {'tiles': [47, 48, 53, 54], 'pins': [13, 12, 27, 14]},
+    'esp/15/in': {'tiles': [49, 50, 51, 52], 'pins': [13, 12, 27, 14]},
+    'esp/16/in': {'tiles': [69, 70, 71, 72], 'pins': [13, 12, 27, 14]},
+    'esp/17/in': {'tiles': [67, 68, 73, 74], 'pins': [13, 12, 27, 14]},
+    'esp/18/in': {'tiles': [65, 66, 75, 76], 'pins': [13, 12, 27, 14]},
+    'esp/19/in': {'tiles': [63, 64, 77, 78], 'pins': [13, 12, 27, 14]},
+    'esp/20/in': {'tiles': [61, 62, 79, 80], 'pins': [13, 12, 27, 14]},
+    'esp/21/in': {'tiles': [89, 90, 91, 92], 'pins': [13, 12, 27, 14]},
+    'esp/22/in': {'tiles': [87, 88, 93, 94], 'pins': [13, 12, 27, 14]},
+    'esp/23/in': {'tiles': [85, 86, 95, 96], 'pins': [13, 12, 27, 14]},
+    'esp/24/in': {'tiles': [83, 84, 97, 98], 'pins': [13, 12, 27, 14]},
+    'esp/25/in': {'tiles': [81, 82, 99, 100], 'pins': [13, 12, 27, 14]}
+}
+
+# ---------------------------
+# Game Configuration
+# ---------------------------
+TEAMS = {
+    "team1": {"pos": 0, "color": "#00CED1"},
+    "team2": {"pos": 0, "color": "#800080"}
+}
+MAX_TILES = 100
+STATE_FILE = "game_state.json"
+
+# ---------------------------
+# MQTT Setup
+# ---------------------------
+client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
+client.connect(BROKER, MQTT_PORT, 60)
+client.loop_start()
+
+
+# ---------------------------
+# Helper Functions
+# ---------------------------
+def publish(topic, payload):
+    """Send JSON payload to a topic."""
+    client.publish(topic, json.dumps(payload))
+
+
+def log(msg):
+    """Print timestamped log messages."""
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
+
+
+def save_state():
+    """Save current TEAMS positions to file."""
+    state = {team: TEAMS[team]["pos"] for team in TEAMS}
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
+def load_state():
+    """Load saved positions from file if exists."""
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+            for team, pos in data.items():
+                if team in TEAMS:
+                    TEAMS[team]["pos"] = pos
+
+
+def all_leds_off():
+    """Turn off all LEDs across all ESPs."""
+    for topic, mapping in TILE_MAPPING.items():
+        for pin in mapping["pins"]:
+            payload = {"tile": None, "state": "off", "color": "#000000"}
+            publish(topic, payload)
+
+
+def turn_tile_on(tile, team):
+    """Light up one tile for the given team color."""
+    for topic, mapping in TILE_MAPPING.items():
+        if tile in mapping["tiles"]:
+            color = TEAMS[team]["color"]
+            payload = {"tile": tile, "state": "on", "color": color}
+            publish(topic, payload)
+
+
+def turn_tile_off(tile):
+    """Turn off a specific tile."""
+    for topic, mapping in TILE_MAPPING.items():
+        if tile in mapping["tiles"]:
+            payload = {"tile": tile, "state": "off", "color": "#000000"}
+            publish(topic, payload)
+
+
+def roll_dice():
+    """Simulate a dice roll."""
+    log("Rolling dice...")
+    time.sleep(1)
+    roll = random.randint(1, 6)
+    log(f"Dice rolled: {roll}!")
+    return roll
+
+
+def animate_move(team, start, end):
+    """Animate movement between tiles with LED transitions."""
+    step = 1 if end >= start else -1
+    for tile in range(start + step, end + step, step):
+        turn_tile_on(tile, team)
+        time.sleep(0.3)
+        turn_tile_off(tile)
+    turn_tile_on(end, team)
+
+
+def print_board_state():
+    """Display current tile positions."""
+    print("\n" + "=" * 30)
+    log("CURRENT BOARD STATE:")
+    for team, data in TEAMS.items():
+        print(f"  - {team.capitalize()} ({data['color']}) at tile: {data['pos']}")
+    print("=" * 30 + "\n")
+
+
+def get_valid_input(prompt, valid_options):
+    """Safely get user input with validation."""
+    while True:
+        user_input = input(prompt).lower().strip()
+        if user_input in valid_options:
+            return user_input
+        print(f"Invalid input. Choose from: {', '.join(valid_options)}")
+
+
+# ---------------------------
+# Game Logic
+# ---------------------------
+def move_team(team, steps):
+    """Move team by dice roll, animate, and update position."""
+    start = TEAMS[team]["pos"]
+    new_pos = min(start + steps, MAX_TILES)
+
+    # Turn off previous LED
+    if start > 0:
+        turn_tile_off(start)
+
+    # Animate movement
+    animate_move(team, start, new_pos)
+    TEAMS[team]["pos"] = new_pos
+    save_state()
+
+    log(f"{team.capitalize()} moved to tile {new_pos}")
+
+    if new_pos == MAX_TILES:
+        log(f"!!! {team.capitalize()} has won the game !!!")
+        return True
+    return False
+
+
+def game_loop():
+    """Main CLI-based round logic."""
+    load_state()
+    all_leds_off()
+    log("Starting Snakes & Ladders MQTT Game!")
+
+    while True:
+        print_board_state()
+
+        # New Round
+        log("--- NEW ROUND ---")
+        first_team = get_valid_input("Which team pressed the buzzer? (team1/team2): ", ["team1", "team2"])
+        log(f"{first_team.capitalize()} buzzed first!")
+
+        action = get_valid_input("Another round or roll dice? (another/roll): ", ["another", "roll"])
+
+        # Case 1: Team rolls dice directly
+        if action == "roll":
+            steps = roll_dice()
+            if move_team(first_team, steps):
+                break
+            continue
+
+        # Case 2: Sub-round logic
+        log("--- SUB ROUND ---")
+        log(f"{first_team.capitalize()} is blocked from answering now.")
+        second_team = get_valid_input("Which team pressed the buzzer now? (team1/team2): ", ["team1", "team2"])
+
+        if second_team == first_team:
+            log(f"{first_team.capitalize()} already answered. Round reset.")
+            continue
+
+        answer = get_valid_input("Was their answer correct or wrong? (correct/wrong): ", ["correct", "wrong"])
+        if answer == "wrong":
+            log("Incorrect answer. Round reset.")
+            continue
+
+        # Correct answer -> Roll dice for sub-round winner
+        log("Correct answer! Rolling dice for sub-round winner.")
+        steps = roll_dice()
+        if move_team(second_team, steps):
+            break
+
+    log("Game Over! 🎉")
+    all_leds_off()
+
+
+# ---------------------------
+# Entry Point
+# ---------------------------
+if _name_ == "_main_":
+    game_loop()
