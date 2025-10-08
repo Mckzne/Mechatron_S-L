@@ -20,16 +20,16 @@ TILE_MAPPING = {
     'esp/8/in':  {'tiles': [25, 26, 35, 36], 'pins': [13, 12, 27, 14]},
     'esp/7/in':  {'tiles': [23, 24, 37, 38], 'pins': [13, 12, 27, 14]},
     'esp/6/in': {'tiles': [21, 22, 39, 40], 'pins': [13, 12, 27, 14]},
-    'esp/15/in': {'tiles': [41, 42, 59, 60], 'pins': [13, 12, 27, 14]},
-    'esp/14/in': {'tiles': [43, 44, 57, 58], 'pins': [13, 12, 27, 14]},
+    'esp/11/in': {'tiles': [41, 42, 59, 60], 'pins': [13, 12, 27, 14]},
+    'esp/12/in': {'tiles': [43, 44, 57, 58], 'pins': [13, 12, 27, 14]},
     'esp/13/in': {'tiles': [45, 46, 55, 56], 'pins': [13, 12, 27, 14]},
-    'esp/12/in': {'tiles': [47, 48, 53, 54], 'pins': [13, 12, 27, 14]},
-    'esp/11/in': {'tiles': [49, 50, 51, 52], 'pins': [13, 12, 27, 14]},
-    'esp/20/in': {'tiles': [69, 70, 71, 72], 'pins': [13, 12, 27, 14]},
-    'esp/19/in': {'tiles': [67, 68, 73, 74], 'pins': [13, 12, 27, 14]},
+    'esp/14/in': {'tiles': [47, 48, 53, 54], 'pins': [13, 12, 27, 14]},
+    'esp/15/in': {'tiles': [49, 50, 51, 52], 'pins': [13, 12, 27, 14]},
+    'esp/16/in': {'tiles': [69, 70, 71, 72], 'pins': [13, 12, 27, 14]},
+    'esp/17/in': {'tiles': [67, 68, 73, 74], 'pins': [13, 12, 27, 14]},
     'esp/18/in': {'tiles': [65, 66, 75, 76], 'pins': [13, 12, 27, 14]},
-    'esp/17/in': {'tiles': [63, 64, 77, 78], 'pins': [13, 12, 27, 14]},
-    'esp/16/in': {'tiles': [61, 62, 79, 80], 'pins': [13, 12, 27, 14]},
+    'esp/19/in': {'tiles': [63, 64, 77, 78], 'pins': [13, 12, 27, 14]},
+    'esp/20/in': {'tiles': [61, 62, 79, 80], 'pins': [13, 12, 27, 14]},
     'esp/21/in': {'tiles': [89, 90, 91, 92], 'pins': [13, 12, 27, 14]},
     'esp/22/in': {'tiles': [87, 88, 93, 94], 'pins': [13, 12, 27, 14]},
     'esp/23/in': {'tiles': [85, 86, 95, 96], 'pins': [13, 12, 27, 14]},
@@ -48,7 +48,7 @@ TEAMS = {
 
 MAX_TILES = 100
 
-client = mqtt.Client(client_id="master_pi", protocol=mqtt.MQTTv311)
+client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
 client.connect(BROKER, MQTT_PORT, 60)
 client.loop_start()
 
