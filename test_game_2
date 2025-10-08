@@ -4,13 +4,13 @@ import time
 import os
 import paho.mqtt.client as mqtt
 
-# ---------------------------
+# -------------------
 # MQTT Configuration
-# ---------------------------
+# -------------------
 BROKER = "10.42.0.1"
 MQTT_PORT = 1883
 
-# ESP Tile Mapping (fill fully for your setup)
+# Mapping ESP devices to their tiles and GPIO pins
 TILE_MAPPING = {
     'esp/1/in':  {'tiles': [1, 2, 19, 20], 'pins': [13, 12, 27, 14]},
     'esp/2/in':  {'tiles': [3, 4, 17, 18], 'pins': [13, 12, 27, 14]},
@@ -39,190 +39,189 @@ TILE_MAPPING = {
     'esp/25/in': {'tiles': [81, 82, 99, 100], 'pins': [13, 12, 27, 14]}
 }
 
-# ---------------------------
-# Game Configuration
-# ---------------------------
+# Team configuration
 TEAMS = {
-    "team1": {"pos": 0, "color": "#00CED1"},
-    "team2": {"pos": 0, "color": "#800080"}
+    "Team1": {"color": "#00CED1"},  # Teal
+    "Team2": {"color": "#800080"}   # Purple
 }
-MAX_TILES = 100
-STATE_FILE = "game_state.json"
 
-# ---------------------------
-# MQTT Setup
-# ---------------------------
+STATE_FILE = "game_state.json"
+MAX_TILES = 100
+
+# MQTT client setup
 client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
 client.connect(BROKER, MQTT_PORT, 60)
 client.loop_start()
 
 
-# ---------------------------
-# Helper Functions
-# ---------------------------
+# -------------------
+# Utility Functions
+# -------------------
 def publish(topic, payload):
-    """Send JSON payload to a topic."""
     client.publish(topic, json.dumps(payload))
 
 
 def log(msg):
-    """Print timestamped log messages."""
     print(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
-def save_state():
-    """Save current TEAMS positions to file."""
-    state = {team: TEAMS[team]["pos"] for team in TEAMS}
+def save_state(game_state):
     with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
+        json.dump(game_state, f)
 
 
 def load_state():
-    """Load saved positions from file if exists."""
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
-            data = json.load(f)
-            for team, pos in data.items():
-                if team in TEAMS:
-                    TEAMS[team]["pos"] = pos
+            return json.load(f)
+    else:
+        return None
 
 
 def all_leds_off():
-    """Turn off all LEDs across all ESPs."""
     for topic, mapping in TILE_MAPPING.items():
         for pin in mapping["pins"]:
             payload = {"tile": None, "state": "off", "color": "#000000"}
             publish(topic, payload)
 
 
-def turn_tile_on(tile, team):
-    """Light up one tile for the given team color."""
+def turn_tile_on(tile, color):
     for topic, mapping in TILE_MAPPING.items():
         if tile in mapping["tiles"]:
-            color = TEAMS[team]["color"]
+            idx = mapping["tiles"].index(tile)
             payload = {"tile": tile, "state": "on", "color": color}
             publish(topic, payload)
+            return
 
 
 def turn_tile_off(tile):
-    """Turn off a specific tile."""
     for topic, mapping in TILE_MAPPING.items():
         if tile in mapping["tiles"]:
+            idx = mapping["tiles"].index(tile)
             payload = {"tile": tile, "state": "off", "color": "#000000"}
             publish(topic, payload)
+            return
 
 
 def roll_dice():
-    """Simulate a dice roll."""
-    log("Rolling dice...")
-    time.sleep(1)
-    roll = random.randint(1, 6)
-    log(f"Dice rolled: {roll}!")
-    return roll
+    return random.randint(1, 6)
 
 
 def animate_move(team, start, end):
-    """Animate movement between tiles with LED transitions."""
+    """LED animation for movement."""
+    color = TEAMS[team]["color"]
     step = 1 if end >= start else -1
     for tile in range(start + step, end + step, step):
-        turn_tile_on(tile, team)
+        turn_tile_on(tile, color)
         time.sleep(0.3)
-        turn_tile_off(tile)
-    turn_tile_on(end, team)
+        if tile != end:
+            turn_tile_off(tile)
+    turn_tile_on(end, color)
 
 
-def print_board_state():
-    """Display current tile positions."""
-    print("\n" + "=" * 30)
-    log("CURRENT BOARD STATE:")
-    for team, data in TEAMS.items():
-        print(f"  - {team.capitalize()} ({data['color']}) at tile: {data['pos']}")
-    print("=" * 30 + "\n")
-
-
-def get_valid_input(prompt, valid_options):
-    """Safely get user input with validation."""
-    while True:
-        user_input = input(prompt).lower().strip()
-        if user_input in valid_options:
-            return user_input
-        print(f"Invalid input. Choose from: {', '.join(valid_options)}")
-
-
-# ---------------------------
-# Game Logic
-# ---------------------------
-def move_team(team, steps):
-    """Move team by dice roll, animate, and update position."""
-    start = TEAMS[team]["pos"]
-    new_pos = min(start + steps, MAX_TILES)
-
-    # Turn off previous LED
-    if start > 0:
-        turn_tile_off(start)
-
-    # Animate movement
-    animate_move(team, start, new_pos)
-    TEAMS[team]["pos"] = new_pos
-    save_state()
-
-    log(f"{team.capitalize()} moved to tile {new_pos}")
-
-    if new_pos == MAX_TILES:
-        log(f"!!! {team.capitalize()} has won the game !!!")
-        return True
-    return False
-
-
-def game_loop():
-    """Main CLI-based round logic."""
-    load_state()
+# -------------------
+# Startup Animation
+# -------------------
+def led_test_animation():
+    """Sequentially light up each tile from 1 → 100."""
+    log("🔧 Running LED test animation...")
+    test_color = "#FFFFFF"  # White test color
+    for tile in range(1, MAX_TILES + 1):
+        turn_tile_on(tile, test_color)
+        time.sleep(0.08)
+        if tile > 1:
+            turn_tile_off(tile - 1)
+    # Final tile off
+    turn_tile_off(MAX_TILES)
+    time.sleep(0.5)
     all_leds_off()
-    log("Starting Snakes & Ladders MQTT Game!")
+    log("✅ LED test complete. Starting game...")
+
+
+# -------------------
+# Main Game Loop
+# -------------------
+def main_loop():
+    led_test_animation()  # Run LED test before starting
+
+    game_state = load_state()
+    if not game_state:
+        game_state = {"positions": {team: 0 for team in TEAMS}}
+        save_state(game_state)
+
+    all_leds_off()
 
     while True:
-        print_board_state()
+        print("\nCurrent Positions:")
+        for team in TEAMS:
+            print(f"{team}: {game_state['positions'][team]}")
 
-        # New Round
-        log("--- NEW ROUND ---")
-        first_team = get_valid_input("Which team pressed the buzzer? (team1/team2): ", ["team1", "team2"])
-        log(f"{first_team.capitalize()} buzzed first!")
+        for team, pos in game_state['positions'].items():
+            if pos > 0:
+                turn_tile_on(pos, TEAMS[team]["color"])
 
-        action = get_valid_input("Another round or roll dice? (another/roll): ", ["another", "roll"])
+        print("\nWhich team pressed the buzzer first? (Team1/Team2): ")
+        first_team = input().strip()
 
-        # Case 1: Team rolls dice directly
-        if action == "roll":
+        if first_team not in TEAMS:
+            print("Invalid team name. Try again.")
+            continue
+
+        print("Choose: another round or roll dice? (round/roll): ")
+        choice = input().strip().lower()
+
+        if choice == "round":
+            other_team = [t for t in TEAMS if t != first_team][0]
+            print(f"{first_team} can't answer again this round.")
+            print(f"Which team wants to answer? (Only {other_team}): ")
+            next_team = input().strip()
+
+            if next_team != other_team:
+                print("Invalid team. Round reset.")
+                continue
+
+            print("Is the answer correct or wrong? (correct/wrong): ")
+            result = input().strip().lower()
+
+            if result == "wrong":
+                print("Wrong answer. Round resetting...")
+                continue
+            else:
+                steps = roll_dice()
+                print(f"{next_team} rolls the dice and gets {steps}.")
+                old_tile = game_state['positions'][next_team]
+                new_tile = min(old_tile + steps, MAX_TILES)
+                turn_tile_off(old_tile)
+                animate_move(next_team, old_tile, new_tile)
+                game_state['positions'][next_team] = new_tile
+                save_state(game_state)
+                if new_tile == MAX_TILES:
+                    print(f"🎉 {next_team} wins the game!")
+                    all_leds_off()
+                    break
+                continue
+
+        elif choice == "roll":
             steps = roll_dice()
-            if move_team(first_team, steps):
+            print(f"{first_team} rolls the dice and gets {steps}.")
+            old_tile = game_state['positions'][first_team]
+            new_tile = min(old_tile + steps, MAX_TILES)
+            turn_tile_off(old_tile)
+            animate_move(first_team, old_tile, new_tile)
+            game_state['positions'][first_team] = new_tile
+            save_state(game_state)
+            if new_tile == MAX_TILES:
+                print(f"🎉 {first_team} wins the game!")
+                all_leds_off()
                 break
+
+        else:
+            print("Invalid input. Try again.")
             continue
 
-        # Case 2: Sub-round logic
-        log("--- SUB ROUND ---")
-        log(f"{first_team.capitalize()} is blocked from answering now.")
-        second_team = get_valid_input("Which team pressed the buzzer now? (team1/team2): ", ["team1", "team2"])
 
-        if second_team == first_team:
-            log(f"{first_team.capitalize()} already answered. Round reset.")
-            continue
-
-        answer = get_valid_input("Was their answer correct or wrong? (correct/wrong): ", ["correct", "wrong"])
-        if answer == "wrong":
-            log("Incorrect answer. Round reset.")
-            continue
-
-        # Correct answer -> Roll dice for sub-round winner
-        log("Correct answer! Rolling dice for sub-round winner.")
-        steps = roll_dice()
-        if move_team(second_team, steps):
-            break
-
-    log("Game Over! 🎉")
-    all_leds_off()
-
-
-# ---------------------------
-# Entry Point
-# ---------------------------
+# -------------------
+# Run Game
+# -------------------
 if _name_ == "_main_":
-    game_loop()
+    main_loop()
