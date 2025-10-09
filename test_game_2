@@ -48,7 +48,7 @@ TEAMS = {
 
 MAX_TILES = 100
 
-client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
+client = mqtt.Client(client_id="master_pi", protocol=mqtt.MQTTv311)
 client.connect(BROKER, MQTT_PORT, 60)
 client.loop_start()
 
