@@ -5,7 +5,7 @@ import os
 import paho.mqtt.client as mqtt
 
 # ---------- Configuration ----------
-BROKER = "10.42.0.1"
+BROKER = "192.168.1.28"
 MQTT_PORT = 1883
 STATE_FILE = "game_state.json"
 
@@ -87,95 +87,122 @@ def turn_tile_on(tile, color):
 def roll_dice():
     return random.randint(1, 6)
 
-# ---------- Enhanced Animations ----------
-def startup_tile_test():
-    """Sequentially turn on all tiles, keep them on for 3s, then turn off."""
-    log("Starting all-tile LED test...")
-    for tile in range(1, MAX_TILES + 1):
-        turn_tile_on(tile, "#FFFFFF")  # White for test only
-        time.sleep(0.05)  # Slight delay between tiles
-
-    time.sleep(3)  # Keep all tiles on together
+# ---------- Tile Lighting Animation ----------
+def lighting_animation():
+    log("Starting all-tile lighting. All tiles will light up one by one and remain on.")
     all_leds_off()
-    log("LED test complete.\n")
+    for tile in range(1, MAX_TILES + 1):
+        turn_tile_on(tile, "#FFFFFF")
+        time.sleep(0.05)
+    log("All tiles are ON.")
+    time.sleep(3)
 
+# ---------- Dice Move Animation ----------
 def animate_move(team, start, end):
-    """Animate movement: each tile along path turns on sequentially and stays on, then only final tile remains."""
     team_color = TEAMS[team]["color"]
-    path = list(range(start + 1, end + 1)) if end > start else list(range(start - 1, end - 1, -1))
-    
-    # Turn on tiles one by one, all remain on
+    if end > start:
+        path = list(range(start + 1, end + 1))
+    else:
+        path = list(range(start - 1, end - 1, -1))
+    if not path:
+        return
+
+    # Light up all tiles along move path one by one, all remain on
     for tile in path:
         turn_tile_on(tile, team_color)
-        time.sleep(0.3)
-    
-    # Keep all path tiles on for 10 seconds
-    time.sleep(10)
-    
-    # Turn off all tiles except the final one
+        time.sleep(0.5)
+
+    # All path tiles stay ON for 5 seconds
+    time.sleep(5)
+
+    # Turn off all path tiles except final one
     for tile in path[:-1]:
         turn_tile_on(tile, "#000000")
     turn_tile_on(path[-1], team_color)
 
 # ---------- Main Game Loop ----------
 def main_loop():
-    startup_tile_test()
-
-    # Load or start from 0
-    game_state = load_state()
-    choice = input("Start from previous state? (yes/no): ").strip().lower()
-    if choice != "yes" or not game_state:
-        game_state = {"positions": {team: 0 for team in TEAMS}}
-    else:
-        # Light up existing positions
-        for team, pos in game_state["positions"].items():
-            if pos > 0:
-                turn_tile_on(pos, TEAMS[team]["color"])
-
-    all_leds_off()  # Clean start
-
     while True:
-        print("\nCurrent Positions:")
-        for team, pos in game_state["positions"].items():
-            print(f"{team}: {pos}")
-            if pos > 0:
-                turn_tile_on(pos, TEAMS[team]["color"])
+        # Ask for mode: lighting or game
+        print("\nChoose a mode:\n1. Tile lighting animation (lighting)\n2. Game mode (game)")
+        mode_choice = input("Enter 'lighting' or 'game': ").strip().lower()
+        
+        all_leds_off()
 
-        first_team = input("\nWhich team pressed the buzzer first? (Team1–Team6): ").strip()
-        if first_team not in TEAMS:
-            print("Invalid team name. Try again.")
-            continue
-
-        choice = input("Choose: another round or roll dice? (round/roll): ").strip().lower()
-
-        if choice == "round":
-            other_teams = [t for t in TEAMS if t != first_team]
-            next_team = input(f"{first_team} can't answer. Which team wants to answer? (Choose one of {other_teams}): ").strip()
-            if next_team not in other_teams:
-                print("Invalid team. Round reset.")
+        if mode_choice == "lighting":
+            lighting_animation()
+            # After lighting, ask again
+            cont_choice = input("\nLighting done. Do you want to run lighting again or start game? (lighting/game): ").strip().lower()
+            if cont_choice == "lighting":
                 continue
-            result = input("Is the answer correct or wrong? (correct/wrong): ").strip().lower()
-            if result == "wrong":
-                print("Wrong answer, round resetting...")
-                continue
+            elif cont_choice == "game":
+                mode_choice = "game"
             else:
-                steps = roll_dice()
-                old_tile = game_state['positions'][next_team]
-                new_tile = min(old_tile + steps, MAX_TILES)
-                animate_move(next_team, old_tile, new_tile)
-                game_state['positions'][next_team] = new_tile
-                save_state(game_state)
+                print("Invalid input. Returning to menu.")
                 continue
+        
+        if mode_choice == "game":
+            # Ask whether to start from previous state or reset
+            print("\nStart game from previous saved state or reset and start fresh?")
+            state_choice = input("Type 'previous' or 'reset': ").strip().lower()
+            game_state = None
+            if state_choice == "previous":
+                game_state = load_state()
+                if not game_state:
+                    print("No previous state found. Starting fresh.")
+                    game_state = {"positions": {team: 0 for team in TEAMS}}
+            else:
+                game_state = {"positions": {team: 0 for team in TEAMS}}
 
-        elif choice == "roll":
-            steps = roll_dice()
-            old_tile = game_state['positions'][first_team]
-            new_tile = min(old_tile + steps, MAX_TILES)
-            animate_move(first_team, old_tile, new_tile)
-            game_state['positions'][first_team] = new_tile
-            save_state(game_state)
-        else:
-            print("Invalid input, try again.")
+            all_leds_off()
+            # Light up initial positions
+            for team, pos in game_state["positions"].items():
+                if pos > 0:
+                    turn_tile_on(pos, TEAMS[team]["color"])
 
-if _name_ == "_main_":
+            while True:
+                print("\nCurrent Positions:")
+                for team, pos in game_state["positions"].items():
+                    print(f"{team}: {pos}")
+                    if pos > 0:
+                        turn_tile_on(pos, TEAMS[team]["color"])
+
+                first_team = input("\nWhich team pressed the buzzer first? (Team1–Team6): ").strip()
+                if first_team not in TEAMS:
+                    print("Invalid team name. Try again.")
+                    continue
+
+                choice = input("Choose: another round or roll dice? (round/roll): ").strip().lower()
+
+                if choice == "round":
+                    other_teams = [t for t in TEAMS if t != first_team]
+                    next_team = input(f"{first_team} can't answer. Which team wants to answer? (Choose one of {other_teams}): ").strip()
+                    if next_team not in other_teams:
+                        print("Invalid team. Round reset.")
+                        continue
+                    result = input("Is the answer correct or wrong? (correct/wrong): ").strip().lower()
+                    if result == "wrong":
+                        print("Wrong answer, round resetting...")
+                        continue
+                    else:
+                        steps = roll_dice()
+                        old_tile = game_state['positions'][next_team]
+                        new_tile = min(old_tile + steps, MAX_TILES)
+                        animate_move(next_team, old_tile, new_tile)
+                        game_state['positions'][next_team] = new_tile
+                        save_state(game_state)
+                        continue
+
+                elif choice == "roll":
+                    steps = roll_dice()
+                    old_tile = game_state['positions'][first_team]
+                    new_tile = min(old_tile + steps, MAX_TILES)
+                    animate_move(first_team, old_tile, new_tile)
+                    game_state['positions'][first_team] = new_tile
+                    save_state(game_state)
+                else:
+                    print("Invalid input, try again.")
+            # end of game while loop
+
+if __name__ == "__main__":
     main_loop()
