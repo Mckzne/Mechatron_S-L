@@ -48,7 +48,7 @@ TEAMS = {
 
 MAX_TILES = 100
 
-client = mqtt.Client(client_id="master_pi", protocol=mqtt.MQTTv311)
+client = mqtt.Client("master_pi", protocol=mqtt.MQTTv311)
 client.connect(BROKER, MQTT_PORT, 60)
 client.loop_start()
 
@@ -71,94 +71,89 @@ def load_state():
 
 def all_leds_off():
     for topic, mapping in TILE_MAPPING.items():
-        for pin in mapping["pins"]:
-            payload = {"tile": None, "state": "off", "color": "#000000"}
-            publish(topic, payload)
+        payload = {"tile": None, "state": "off", "color": "#000000"}
+        publish(topic, payload)
+    log("All LEDs turned off")
 
 def turn_tile_on(tile, color):
-    """Turn on a tile with a given color."""
     for topic, mapping in TILE_MAPPING.items():
         if tile in mapping["tiles"]:
             idx = mapping["tiles"].index(tile)
             pin = mapping["pins"][idx]
             payload = {"tile": tile, "state": "on", "color": color}
+            print(f"Publishing to {topic} tile {tile} on pin {pin} color {color}")  # Debug log
             publish(topic, payload)
+            time.sleep(0.05)  # Small delay between publishes for stability
 
 def roll_dice():
     return random.randint(1, 6)
 
-# ---------- Tile Lighting Animation ----------
-def lighting_animation():
-    log("Starting all-tile lighting. All tiles will light up one by one and remain on.")
+# ---------- Lighting Animation ----------
+def sequential_all_tile_lighting():
+    log("Lighting tiles one by one...")
     all_leds_off()
     for tile in range(1, MAX_TILES + 1):
-        turn_tile_on(tile, "#FFFFFF")
-        time.sleep(0.05)
-    log("All tiles are ON.")
-    time.sleep(3)
+        turn_tile_on(tile, "#FFD700")  # Gold color instead of white
+        time.sleep(0.07)  # Slight delay between each tile lighting
+    log("All 100 tiles are ON.")
 
-# ---------- Dice Move Animation ----------
+# ---------- Dice Animation ----------
 def animate_move(team, start, end):
     team_color = TEAMS[team]["color"]
     if end > start:
         path = list(range(start + 1, end + 1))
     else:
         path = list(range(start - 1, end - 1, -1))
-    if not path:
-        return
 
-    # Light up all tiles along move path one by one, all remain on
+    # Light up each tile from start to end, keeping previous ones ON
     for tile in path:
         turn_tile_on(tile, team_color)
         time.sleep(0.5)
 
-    # All path tiles stay ON for 5 seconds
     time.sleep(5)
 
-    # Turn off all path tiles except final one
+    # Turn OFF all except final position
     for tile in path[:-1]:
         turn_tile_on(tile, "#000000")
     turn_tile_on(path[-1], team_color)
 
-# ---------- Main Game Loop ----------
+# ---------- Main Control Loop ----------
 def main_loop():
     while True:
-        # Ask for mode: lighting or game
-        print("\nChoose a mode:\n1. Tile lighting animation (lighting)\n2. Game mode (game)")
-        mode_choice = input("Enter 'lighting' or 'game': ").strip().lower()
-        
-        all_leds_off()
+        print("\nChoose Action: ")
+        print("1. Run All-Tile Lighting Animation")
+        print("2. Start Game")
+        action = input("Enter 1 or 2: ").strip()
 
-        if mode_choice == "lighting":
-            lighting_animation()
-            # After lighting, ask again
-            cont_choice = input("\nLighting done. Do you want to run lighting again or start game? (lighting/game): ").strip().lower()
-            if cont_choice == "lighting":
+        if action == "1":
+            all_leds_off()
+            sequential_all_tile_lighting()
+            # After animation, ask whether to play again or rerun lighting
+            again = input("All tiles lit. Run lighting again or start game? (lighting/game): ").strip().lower()
+            if again == "lighting":
                 continue
-            elif cont_choice == "game":
-                mode_choice = "game"
-            else:
-                print("Invalid input. Returning to menu.")
+            elif again != "game":
+                print("Invalid input, starting over.")
                 continue
-        
-        if mode_choice == "game":
-            # Ask whether to start from previous state or reset
-            print("\nStart game from previous saved state or reset and start fresh?")
-            state_choice = input("Type 'previous' or 'reset': ").strip().lower()
-            game_state = None
-            if state_choice == "previous":
+
+        if action == "2" or (action == "1" and again == "game"):
+            all_leds_off()
+
+            print("\nDo you want to load previous state or start fresh?")
+            choice = input("Enter 'load' to continue or 'reset' to start from 0: ").strip().lower()
+            if choice == "load":
                 game_state = load_state()
                 if not game_state:
-                    print("No previous state found. Starting fresh.")
+                    print("No previous state found. Starting new game.")
                     game_state = {"positions": {team: 0 for team in TEAMS}}
+                else:
+                    for team, pos in game_state["positions"].items():
+                        if pos > 0:
+                            turn_tile_on(pos, TEAMS[team]["color"])
             else:
                 game_state = {"positions": {team: 0 for team in TEAMS}}
 
             all_leds_off()
-            # Light up initial positions
-            for team, pos in game_state["positions"].items():
-                if pos > 0:
-                    turn_tile_on(pos, TEAMS[team]["color"])
 
             while True:
                 print("\nCurrent Positions:")
@@ -167,13 +162,12 @@ def main_loop():
                     if pos > 0:
                         turn_tile_on(pos, TEAMS[team]["color"])
 
-                first_team = input("\nWhich team pressed the buzzer first? (Team1–Team6): ").strip()
+                first_team = input("\nWhich team pressed the buzzer first? (Team1-Team6): ").strip()
                 if first_team not in TEAMS:
                     print("Invalid team name. Try again.")
                     continue
 
                 choice = input("Choose: another round or roll dice? (round/roll): ").strip().lower()
-
                 if choice == "round":
                     other_teams = [t for t in TEAMS if t != first_team]
                     next_team = input(f"{first_team} can't answer. Which team wants to answer? (Choose one of {other_teams}): ").strip()
@@ -200,9 +194,9 @@ def main_loop():
                     animate_move(first_team, old_tile, new_tile)
                     game_state['positions'][first_team] = new_tile
                     save_state(game_state)
+                    continue
                 else:
                     print("Invalid input, try again.")
-            # end of game while loop
 
 if __name__ == "__main__":
     main_loop()
